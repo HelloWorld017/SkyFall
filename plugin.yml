@@ -1,0 +1,6 @@
+name: "FREEDOM DiVE↓"
+author: Khinenw
+version: Always testing
+description: "A minigame which makes people fall from the sky."
+main: Khinenw\SandCanyon\SandCanyon
+api: 1.12.0
