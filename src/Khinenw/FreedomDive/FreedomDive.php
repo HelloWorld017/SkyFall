@@ -13,10 +13,11 @@ use pocketmine\level\Location;
 use pocketmine\network\protocol\InteractPacket;
 use pocketmine\plugin\PluginBase;
 use pocketmine\utils\Config;
+use pocketmine\utils\TextFormat;
 
 class FreedomDive extends PluginBase implements Listener{
 
-	private $worlds, $players, $config, $npcs;
+	private $worlds, $players, $config, $npcs, $wins;
 
 	private static $translations;
 
@@ -45,6 +46,7 @@ class FreedomDive extends PluginBase implements Listener{
 		}
 
 		$this->config = (new Config($this->getDataFolder()."config.yml", Config::YAML))->getAll();
+		$this->wins = (new Config($this->getDataFolder()."config.yml", Config::YAML))->getAll();
 
 		$lang = "en";
 		if(isset($this->config["language"])){
@@ -104,7 +106,7 @@ class FreedomDive extends PluginBase implements Listener{
 			return;
 		}
 
-		$this->worlds[$event->getPlayer()->getName()]["manager"]->onPlayerQuit($event->getPlayer());
+		$this->getWorldManagerByPlayerName($event->getPlayer()->getName())->onPlayerQuit($event->getPlayer());
 	}
 
 	public function onMoveEvent(PlayerMoveEvent $event){
@@ -113,7 +115,7 @@ class FreedomDive extends PluginBase implements Listener{
 		if(($fromLevel = $event->getFrom()->getLevel()->getFolderName()) !== ($toLevel = $event->getTo()->getLevel()->getFolderName())){
 			if(isset($this->worlds[$toLevel])){
 				$this->players[$event->getPlayer()->getName()] = $toLevel;
-				$this->worlds[$toLevel]["manager"]->onPlayerMoveToWorld($event->getPlayer());
+				$this->getWorldManagerByWorldFolderName($toLevel)->onPlayerMoveToWorld($event->getPlayer());
 			}
 
 			if(isset($this->worlds[$fromLevel])){
@@ -121,7 +123,7 @@ class FreedomDive extends PluginBase implements Listener{
 					$this->players[$event->getPlayer()->getName()] = $this->getServer()->getDefaultLevel()->getFolderName();
 				}
 
-				$this->worlds[$fromLevel]["manager"]->onPlayerMoveToAnotherWorld($event->getPlayer(), $toLevel);
+				$this->getWorldManagerByWorldFolderName($fromLevel)->onPlayerMoveToAnotherWorld($event->getPlayer(), $toLevel);
 			}
 
 			foreach($this->npcs as $npc){
@@ -142,9 +144,59 @@ class FreedomDive extends PluginBase implements Listener{
 		$pk = $event->getPacket();
 		if($pk instanceof InteractPacket){
 			if(isset($this->npcs[$pk->target])){
-				$this->npcs[$pk->target]->onInteract($event->getPlayer());
+				$this->getNPCByEID($pk->target)->onInteract($event->getPlayer());
 			}
 		}
+	}
+
+	public function notifyGameEnded($serverId, array $winner){
+		if(count($winner) === 0) {
+			$this->getServer()->broadcastMessage(TextFormat::AQUA.FreedomDive::getTranslation("FINISH_NO_WINNER", $serverId));
+		}else{
+			$winnerText = "";
+
+			foreach($winner as $winnerName){
+				if(isset($this->wins[$winnerName])){
+					$this->wins[$winnerName]++;
+				}else{
+					$this->wins[$winnerName] = 0;
+				}
+
+				$winnerText .= "$winnerName, ";
+			}
+
+			$winnerText = substr($winnerText, 0, -2);
+
+			$this->getServer()->broadcastMessage(TextFormat::AQUA.FreedomDive::getTranslation("FINISH_WINNER", $serverId, $winnerText));
+		}
+	}
+
+	/**
+	 * @param string $playerName name of player
+	 * @return WorldManager
+	 */
+	public function getWorldManagerByPlayerName($playerName){
+		return $this->worlds[$this->players[$playerName]]["manager"];
+	}
+
+	/**
+	 * @param string $worldFolderName foldername of the world
+	 * @return WorldManager
+	 */
+	public function getWorldManagerByWorldFolderName($worldFolderName){
+		return $this->worlds[$worldFolderName]["manager"];
+	}
+
+	/**
+	 * @param int $eid Entity ID of the NPC
+	 * @return WorksNPC
+	 */
+	public function getNPCByEID($eid){
+		return $this->npcs[$eid];
+	}
+
+	public function getConfiguration($key){
+		return $this->config[$key];
 	}
 
 	public static function getTranslation($key, ...$params){

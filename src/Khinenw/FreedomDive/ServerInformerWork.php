@@ -15,6 +15,7 @@ class ServerInformerWork implements NPCWork{
 	}
 
 	public function work(Player $interactedPlayer){
+		if(FreedomDive::getInstance()->getW)
 		$interactedPlayer->teleport(Server::getInstance()->getLevelByName($this->worldName)->getSpawnLocation());
 	}
 }
