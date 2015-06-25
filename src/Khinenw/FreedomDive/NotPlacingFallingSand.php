@@ -18,7 +18,7 @@
 	 *
 	*/
 
-	namespace Khinenw\SandCanyon;
+	namespace Khinenw\FreedomDive;
 
 	use pocketmine\entity\Entity;
 	use pocketmine\event\entity\EntityDamageEvent;
