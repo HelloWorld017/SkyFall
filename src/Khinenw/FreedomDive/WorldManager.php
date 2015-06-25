@@ -22,7 +22,7 @@ use pocketmine\utils\TextFormat;
 class WorldManager {
 	private $worldFolderName;
 	private $serverId;
-	private $player;
+	public $player;
 	private $removedBlocks;
 	private $currentStatus;
 	private $aliveCount;
@@ -57,6 +57,7 @@ class WorldManager {
 
 	public function startGame(){
 		$this->currentStatus = self::STATUS_PREPARING;
+		$this->roundTick = 0;
 		foreach($this->player as $playerData){
 			$playerData["player"]->getInventory()->addItem(Item::get(self::SHOVEL));
 			$playerData["player"]->getInventory()->addEffect(Effect::getEffect(Effect::JUMP)->setAmplifier(3)->setDuration(36000));
@@ -81,6 +82,15 @@ class WorldManager {
 		$this->resetValues();
 	}
 
+	public function regenerateBlocks(){
+		$level = Server::getInstance()->getLevelByName($this->worldFolderName);
+
+		foreach($this->removedBlocks as $blockData){
+			$level->setBlock($blockData["pos"], $blockData["block"]);
+		}
+
+	}
+
 	public function onPlayerDrown(Player $player){
 		if($this->currentStatus === self::STATUS_INGAME) {
 			$this->player[$player->getName()]["status"] = self::PLAYER_STATUS_FALLEN;
@@ -102,9 +112,11 @@ class WorldManager {
 			}
 		}
 
+		$this->aliveCount = count($alive);
+
 		switch($this->currentStatus){
 			case self::STATUS_INGAME:
-					if(count($alive) <= 1){
+					if($this->aliveCount <= 1){
 						$this->winGame($alive);
 					}
 				break;
@@ -233,5 +245,23 @@ class WorldManager {
 	public function setIngame(){
 		$this->currentStatus = self::STATUS_INGAME;
 		$this->broadcastMessageForPlayers(FreedomDive::getTranslation("GAME_STARTED"));
+		$this->roundTick = 0;
+	}
+
+	public function getTip(){
+		switch($this->currentStatus){
+			case self::STATUS_NOT_STARTED:
+				return TextFormat::GREEN.FreedomDive::getTranslation("WAITING_FOR_PLAYERS", count($this->player), FreedomDive::getInstance()->getConfiguration("NEED_PLAYERS"));
+
+			case self::STATUS_PREPARING:
+				$time = (FreedomDive::getInstance()->getConfiguration("PREPARATION_TERM") - $this->roundTick) / 20;
+				return TextFormat::GREEN.FreedomDive::getTranslation("PREPARING", round($time / 60), $time % 60);
+
+			case self::STATUS_INGAME:
+				$time = (FreedomDive::getInstance()->getConfiguration("GAME_TERM") - $this->roundTick / 20);
+				return TextFormat::AQUA.FreedomDive::getTranslation("GAME_MESSAGE", round($time / 60), $time % 60, $this->aliveCount);
+
+			default: return "";
+		}
 	}
 }
