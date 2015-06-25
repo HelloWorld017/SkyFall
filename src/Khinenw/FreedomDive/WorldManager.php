@@ -2,8 +2,8 @@
 
 namespace Khinenw\FreedomDive;
 
-use Khinenw\SandCanyon\NotPlacingFallingSand;
 use pocketmine\block\Block;
+use pocketmine\entity\Effect;
 use pocketmine\event\entity\EntitySpawnEvent;
 use pocketmine\item\Item;
 use pocketmine\level\particle\CriticalParticle;
@@ -57,6 +57,11 @@ class WorldManager {
 
 	public function startGame(){
 		$this->currentStatus = self::STATUS_PREPARING;
+		foreach($this->player as $playerData){
+			$playerData["player"]->getInventory()->addItem(Item::get(self::SHOVEL));
+			$playerData["player"]->getInventory()->addEffect(Effect::getEffect(Effect::JUMP)->setAmplifier(3)->setDuration(36000));
+			$playerData["player"]->getInventory()->addEffect(Effect::getEffect(Effect::SPEED)->setAmplifier(3)->setDuration(36000));
+		}
 	}
 
 	//array of winner's player object
@@ -116,7 +121,6 @@ class WorldManager {
 			"player" => $player,
 			"status" => self::PLAYER_STATUS_ALIVE
 		];
-		$player->getInventory()->addItem(Item::get(Item::WOODEN_SHOVEL));
 		$this->playerCountChange();
 	}
 
@@ -129,7 +133,9 @@ class WorldManager {
 	}
 
 	private function playerOut(Player $player){
-		$player->getInventory()->removeItem(Item::get(Item::WOODEN_SHOVEL));
+		$player->getInventory()->removeItem(Item::get(self::SHOVEL));
+		$player->removeEffect(Effect::SPEED);
+		$player->removeEffect(Effect::JUMP);
 		$isFallen = $this->player[$player->getName()] === self::PLAYER_STATUS_FALLEN;
 		unset($this->player[$player->getName()]);
 
