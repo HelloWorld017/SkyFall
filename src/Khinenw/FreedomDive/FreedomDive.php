@@ -9,11 +9,13 @@ use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
 use pocketmine\event\block\BlockBreakEvent;
 use pocketmine\event\block\BlockPlaceEvent;
+use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\event\Listener;
 use pocketmine\event\player\PlayerInteractEvent;
 use pocketmine\event\player\PlayerJoinEvent;
 use pocketmine\event\player\PlayerMoveEvent;
 use pocketmine\event\player\PlayerQuitEvent;
+use pocketmine\event\player\PlayerRespawnEvent;
 use pocketmine\event\server\DataPacketReceiveEvent;
 use pocketmine\item\Item;
 use pocketmine\level\Location;
@@ -29,29 +31,18 @@ class FreedomDive extends PluginBase implements Listener{
 
 	private static $translations;
 
-	private $skinFile;
+	private $skinFile = false;
 
 	private static $mi;
 
 	public function onEnable(){
 		self::$mi = $this;
+
 		@mkdir($this->getDataFolder());
 
-		if(is_file($this->getDataFolder()."translation_en.yml")){
-				file_put_contents($this->getDataFolder()."translation_en.yml", stream_get_contents($this->getResource("translation_en.yml")));
-		}
-
-		if(is_file($this->getDataFolder()."translation_ko.yml")){
-			file_put_contents($this->getDataFolder()."translation_ko.yml", stream_get_contents($this->getResource("translation_ko.yml")));
-		}
-
-		if(is_file($this->getDataFolder()."config.yml")){
-			file_put_contents($this->getDataFolder()."config.yml", stream_get_contents($this->getResource("config.yml")));
-		}
-
-		if(!is_file($this->getDataFolder()."skin.png")){
-			file_put_contents($this->getDataFolder()."skin.png", stream_get_contents($this->getResource("skin.png")));
-		}
+		$this->pushFile("translation_en.yml");
+		$this->pushFile("translation_ko.yml");
+		$this->pushFile("config.yml");
 
 		$this->config = (new Config($this->getDataFolder()."config.yml", Config::YAML))->getAll();
 		$this->wins = (new Config($this->getDataFolder()."wins.yml", Config::YAML))->getAll();
@@ -68,10 +59,17 @@ class FreedomDive extends PluginBase implements Listener{
 		$this->npcs = array();
 		$this->players = array();
 		$this->worlds = array();
-		$this->skinFile = file_get_contents($this->getDataFolder()."skin.png");
+		if(is_file($this->getDataFolder()."npc.skin")){
+			$this->skinFile = unserialize(file_get_contents($this->getDataFolder()."npc.skin"));
+		}
+
+		if(!isset($this->config["worlds"])){
+			$this->config["worlds"] = [];
+		}
 
 		$i = 0;
 		foreach($this->config["worlds"] as $worldFolderName => $worldData){
+			$this->getLogger()->info(TextFormat::GREEN."Creating NPC for $worldFolderName");
 			$i++;
 			$npcData = $worldData["npc"];
 			$npc = new WorksNPC(
@@ -93,6 +91,15 @@ class FreedomDive extends PluginBase implements Listener{
 
 		$this->getServer()->getScheduler()->scheduleRepeatingTask(new TickTask($this), 1);
 		$this->getServer()->getScheduler()->scheduleRepeatingTask(new SendMessageTask($this), 1);
+		$this->getServer()->getPluginManager()->registerEvents($this, $this);
+	}
+
+	public function pushFile($fileName){
+		if(!is_file($this->getDataFolder().$fileName)){
+			$res = $this->getResource($fileName);
+			file_put_contents($this->getDataFolder().$fileName, stream_get_contents($res));
+			fclose($res);
+		}
 	}
 
 	/**
@@ -112,16 +119,22 @@ class FreedomDive extends PluginBase implements Listener{
 	public function onCommand(CommandSender $sender, Command $command, $label, array $args){
 		switch($command->getName()){
 			case "gamelevel":
-				if(count($args) <= 1){
+				if(count($args) < 1){
 					return false;
 				}
 
 				if(!($sender instanceof Player)){
 					$sender->sendMessage(TextFormat::RED.self::getTranslation("MUST_INGAME"));
+					return true;
 				}
 
-				if($this->getServer()->getLevelByName($args[0])){
+				if($this->getServer()->getLevelByName($args[0]) === null){
 					$sender->sendMessage(TextFormat::RED.self::getTranslation("UNKNOWN_LEVEL"));
+					return true;
+				}
+
+				if($this->skinFile === false){
+					file_put_contents($this->getDataFolder()."npc.skin", serialize($sender->getSkinData()));
 				}
 
 				$this->config["worlds"][$args[0]] = [
@@ -129,25 +142,65 @@ class FreedomDive extends PluginBase implements Listener{
 						"x" => $sender->getX(),
 						"y" => $sender->getY(),
 						"z" => $sender->getZ(),
-						"world" => $sender->getLevel()->getFolderName()
+						"world" => $sender->getLevel()->getFolderName(),
 					]
 				];
+
+				$conf = (new Config($this->getDataFolder()."config.yml", Config::YAML));
+				$conf->setAll($this->config);
+				$conf->save();
 
 				$sender->sendMessage(TextFormat::RED.self::getTranslation("PLEASE_RESTART_SERVER"));
 				$this->getServer()->getPluginManager()->disablePlugin($this);
 				break;
 
 			case "rank":
-				//TODO sort Array and say win count
-				foreach($this->wins as $winner => $count){
+				$text = TextFormat::AQUA."=========".self::getTranslation("RANK")."=========".TextFormat::YELLOW;
 
+				foreach($this->wins as $winner => $count){
+					$text .= "\n".$winner." : ".$count;
 				}
+
+				$sender->sendMessage($text);
+				break;
+
 		}
 		return true;
 	}
 
-	public function onPlayerJoin(PlayerJoinEvent $event){
+	public function onPlayerDamage(EntityDamageEvent $event){
+		$player = $event->getEntity();
+		if(!$player instanceof Player)return;
+
+		if($this->getWorldManagerByPlayerName($player->getName()) !== null){
+			$event->setCancelled();
+		}
+	}
+
+	public function onPlayerRespawn(PlayerRespawnEvent $event){
 		if(isset($this->players[$event->getPlayer()->getName()])){
+			if(($manager = $this->getWorldManagerByPlayerName($event->getPlayer()->getName())) !== null && $manager->hasPlayer($event->getPlayer()->getName())){
+				$this->getWorldManagerByPlayerName($event->getPlayer()->getName())->onPlayerMoveToAnotherWorld($event->getPlayer(), $this->getServer()->getDefaultLevel()->getFolderName());
+			}
+		}
+
+		foreach($this->npcs as $npc){
+			if($npc->getLevel()->getFolderName() === $this->getServer()->getDefaultLevel()->getFolderName()){
+				$npc->spawnTo($event->getPlayer());
+			}
+		}
+
+		$event->setRespawnPosition($this->getServer()->getDefaultLevel()->getSpawnLocation());
+	}
+
+	public function onPlayerJoin(PlayerJoinEvent $event){
+		foreach($this->npcs as $npc){
+			if($npc->getLevel()->getFolderName() === $event->getPlayer()->getLevel()->getFolderName()){
+				$npc->spawnTo($event->getPlayer());
+			}
+		}
+
+		if(!isset($this->players[$event->getPlayer()->getName()])){
 			$this->players[$event->getPlayer()->getName()] = $this->getServer()->getDefaultLevel()->getFolderName();
 		}
 	}
@@ -157,7 +210,8 @@ class FreedomDive extends PluginBase implements Listener{
 			return;
 		}
 
-		$this->getWorldManagerByPlayerName($event->getPlayer()->getName())->onPlayerQuit($event->getPlayer());
+		$manager = $this->getWorldManagerByPlayerName($event->getPlayer()->getName());
+		if($manager !== null) $manager->onPlayerQuit($event->getPlayer());
 	}
 
 	public function onMoveEvent(PlayerMoveEvent $event){
@@ -185,7 +239,7 @@ class FreedomDive extends PluginBase implements Listener{
 		}
 
 		if(isset($this->worlds[$toLevel])){
-			if($event->getTo()->getY() < $this->getConfiguration("MIN_Y")){
+			if($event->getTo()->getY() <= $this->getConfiguration("MIN_Y")){
 				$this->worlds[$toLevel]["manager"]->onPlayerDrown($event->getPlayer());
 			}
 		}
@@ -228,7 +282,7 @@ class FreedomDive extends PluginBase implements Listener{
 		if(count($winner) === 0) {
 			$this->getServer()->broadcastMessage(TextFormat::AQUA.FreedomDive::getTranslation("FINISH_NO_WINNER", $serverId));
 		}else{
-			$winnerText = "";
+			$winnerText = implode(", ", $winner);
 
 			foreach($winner as $winnerName){
 				if(isset($this->wins[$winnerName])){
@@ -236,11 +290,12 @@ class FreedomDive extends PluginBase implements Listener{
 				}else{
 					$this->wins[$winnerName] = 0;
 				}
-
-				$winnerText .= "$winnerName, ";
+				//$winnerText .= "$winnerName, ";
 			}
 
-			$winnerText = substr($winnerText, 0, -2);
+			arsort($this->wins);
+
+			//$winnerText = substr($winnerText, 0, -2);
 
 			$this->getServer()->broadcastMessage(TextFormat::AQUA.FreedomDive::getTranslation("FINISH_WINNER", $serverId, $winnerText));
 			$wins = (new Config($this->getDataFolder()."wins.yml", Config::YAML));
@@ -254,6 +309,8 @@ class FreedomDive extends PluginBase implements Listener{
 	 * @return WorldManager
 	 */
 	public function getWorldManagerByPlayerName($playerName){
+		if(!isset($this->worlds[$this->players[$playerName]])) return null;
+
 		return $this->worlds[$this->players[$playerName]]["manager"];
 	}
 
@@ -281,7 +338,7 @@ class FreedomDive extends PluginBase implements Listener{
 		foreach($this->worlds as $worldData){
 			$text = $worldData["manager"]->getTip();
 			foreach($worldData["manager"]->player as $playerData){
-				$playerData["player"]->sendTip($text);
+				$playerData["player"]->sendPopup($text);
 			}
 		}
 	}
@@ -293,6 +350,20 @@ class FreedomDive extends PluginBase implements Listener{
 	}
 
 	public static function getTranslation($key, ...$params){
-		return $key;
+		if(!isset(self::$translations[$key])){
+			return $key.", ".implode(", ", $params);
+		}
+
+		$translation = self::$translations[$key];
+
+		foreach($params as $key => $value){
+			$translation = str_replace("%s".($key + 1), $value, $translation);
+		}
+
+		return $translation;
+	}
+
+	public function setPlayerWorld($playerName, $worldFolderName){
+		$this->players[$playerName] = $worldFolderName;
 	}
 }

@@ -15,7 +15,11 @@ class ServerInformerWork implements NPCWork{
 	}
 
 	public function work(Player $interactedPlayer){
-		if(FreedomDive::getInstance()->getW)
-		$interactedPlayer->teleport(Server::getInstance()->getLevelByName($this->worldName)->getSpawnLocation());
+		if(FreedomDive::getInstance()->getWorldManagerByWorldFolderName($this->worldName)->canJoinGame()) {
+			$interactedPlayer->teleport(Server::getInstance()->getLevelByName($this->worldName)->getSpawnLocation());
+			FreedomDive::getInstance()->getWorldManagerByWorldFolderName($this->worldName)->onPlayerMoveToWorld($interactedPlayer);
+		}else{
+			$interactedPlayer->sendMessage(FreedomDive::getTranslation("CANNOT_JOIN"));
+		}
 	}
 }

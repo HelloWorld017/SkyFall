@@ -1,0 +1,13 @@
+LEVEL_INFORMATOR: 서버 %s1
+MUST_INGAME: 이 명령어는 게임 내에서만 실행 가능합니다.
+UNKNOWN_LEVEL: 존재하지 않는 레벨입니다!
+PLEASE_RESTART_SERVER: 서버를 재시작해주세요!
+RANK: 랭킹
+FINISH_NO_WINNER: "서버 %s1에서 진행된 게임이 우승자 없이 종료되었습니다!"
+FINISH_WINNER: "%s2님께서 서버 %s1에서 진행된 게임에서 우승하셨습니다!"
+GAME_STARTED: "게임이 시작되었습니다!"
+WAITING_FOR_PLAYERS: "플레이어를 기다리는 중... (%s1/%s2)"
+PREPARING: "게임 준비중입니다... (%s1분 %s2초 남음)"
+GAME_MESSAGE: "게임 진행중 (%s1분 %s2초 남음, %s3명 살아있음)"
+PLAYER_FALLEN: "%s1님께서 떨어지셨습니다!"
+PLAYER_OUT: "%s1님께서 나가셨습니다!"

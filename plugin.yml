@@ -1,6 +1,30 @@
-name: "FREEDOM DiVE↓"
+name: "SkyFall"
 author: Khinenw
 version: 0.0.1 alpha
-description: "A minigame which makes people fall from the sky."
-main: Khinenw\SandCanyon\SandCanyon
+description: "A minigame which makes people fall from the sky. (a.k.a FREEDOM DiVE↓)"
+main: Khinenw\FreedomDive\FreedomDive
 api: 1.12.0
+
+permissions:
+  freedomdive.*:
+    description: "The permission for using features."
+    default: true
+    children:
+      freedomdive.gamelevel:
+        description: "The permission for setting game level."
+        default: op
+
+      freedomdive.rank:
+        description: "The permission for viewing game rank."
+        default: true
+
+commands:
+  gamelevel:
+    description: "Sets levels as game levels."
+    usage: "/gamelevel [Level Name]"
+    permission: freedomdive.gamelevel
+
+  rank:
+    description: "Shows their ranks."
+    usage: "/rank"
+    permission: freedomdive.rank

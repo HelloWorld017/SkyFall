@@ -37,7 +37,7 @@ class WorldManager {
 	const STATUS_PREPARING = 2;
 
 	const SHOVEL = Item::WOODEN_SHOVEL;
-	const RANGE = 3;
+	const RANGE = 2;
 
 	public function __construct($worldFolderName, $serverId){
 		$this->worldFolderName = $worldFolderName;
@@ -60,8 +60,8 @@ class WorldManager {
 		$this->roundTick = 0;
 		foreach($this->player as $playerData){
 			$playerData["player"]->getInventory()->addItem(Item::get(self::SHOVEL));
-			$playerData["player"]->getInventory()->addEffect(Effect::getEffect(Effect::JUMP)->setAmplifier(3)->setDuration(36000));
-			$playerData["player"]->getInventory()->addEffect(Effect::getEffect(Effect::SPEED)->setAmplifier(3)->setDuration(36000));
+			$playerData["player"]->addEffect(Effect::getEffect(Effect::JUMP)->setAmplifier(3)->setDuration(36000));
+			$playerData["player"]->addEffect(Effect::getEffect(Effect::SPEED)->setAmplifier(3)->setDuration(36000));
 		}
 	}
 
@@ -73,16 +73,27 @@ class WorldManager {
 	}
 
 	private function finishGame(){
+
+		$dive = FreedomDive::getInstance();
+		$defLev = Server::getInstance()->getDefaultLevel();
+		$defPos = $defLev->getSpawnLocation();
+		$this->currentStatus = self::STATUS_NOT_STARTED;
+
+		foreach($this->player as $playerData){
+			$dive->setPlayerWorld($playerData["player"]->getName(), $defLev->getFolderName());
+			$playerData["player"]->teleport($defPos);
+			$this->playerOut($playerData["player"], true);
+		}
+
 		$level = Server::getInstance()->getLevelByName($this->worldFolderName);
 
-		foreach($this->removedBlocks as $blockData){
-			$level->setBlock($blockData["pos"], $blockData["block"]);
-		}
+		$this->regenerateBlocks();
 
 		$this->resetValues();
 	}
 
 	public function regenerateBlocks(){
+		Server::getInstance()->broadcastMessage(TextFormat::AQUA."[FREEDOM DiVE] Regenerating World!");
 		$level = Server::getInstance()->getLevelByName($this->worldFolderName);
 
 		foreach($this->removedBlocks as $blockData){
@@ -129,6 +140,7 @@ class WorldManager {
 	}
 
 	public function onPlayerMoveToWorld(Player $player){
+		FreedomDive::getInstance()->setPlayerWorld($player->getName(), $this->worldFolderName);
 		$this->player[$player->getName()] = [
 			"player" => $player,
 			"status" => self::PLAYER_STATUS_ALIVE
@@ -137,6 +149,7 @@ class WorldManager {
 	}
 
 	public function onPlayerMoveToAnotherWorld(Player $player, $anotherWorldFolderName){
+		FreedomDive::getInstance()->setPlayerWorld($player->getName(), $anotherWorldFolderName);
 		$this->playerOut($player);
 	}
 
@@ -144,14 +157,23 @@ class WorldManager {
 		$this->playerOut($player);
 	}
 
-	private function playerOut(Player $player){
+	public function hasPlayer($playerName){
+		return isset($this->player[$playerName]);
+	}
+
+	private function playerOut(Player $player, $noNotification = false){
 		$player->getInventory()->removeItem(Item::get(self::SHOVEL));
 		$player->removeEffect(Effect::SPEED);
 		$player->removeEffect(Effect::JUMP);
-		$isFallen = $this->player[$player->getName()] === self::PLAYER_STATUS_FALLEN;
+
+		if(!isset($this->player[$player->getName()])){
+			return;
+		}
+
+		$isFallen = $this->player[$player->getName()]["status"] === self::PLAYER_STATUS_FALLEN;
 		unset($this->player[$player->getName()]);
 
-		if(!$isFallen) {
+		if(!$isFallen && !$noNotification){
 			$this->broadcastMessageForPlayers(TextFormat::RED . FreedomDive::getTranslation("PLAYER_OUT", $player->getName()));
 			$this->playerCountChange();
 		}
@@ -159,7 +181,6 @@ class WorldManager {
 
 	public function onPlayerInteractWithShovel(Player $player, Block $block){
 		if($this->currentStatus == self::STATUS_INGAME){
-			//$this->removeBlockWithAnim($block);
 			$this->removeBlockWithRange($block);
 		}
 	}
@@ -183,7 +204,7 @@ class WorldManager {
 		$level = Server::getInstance()->getLevelByName($this->worldFolderName);
 		$originalBlock = $level->getBlock($pos);
 
-		for($i = 0; $i < 50; $i++){
+		for($i = 0; $i < 25; $i++){
 			$level->addParticle(new CriticalParticle($pos->add(mt_rand(-1, 1), mt_rand(-1, 1), mt_rand(-1, 1))));
 		}
 
@@ -193,33 +214,34 @@ class WorldManager {
 
 		array_push($this->removedBlocks, [
 			"pos" => $pos,
-			"originalBlock" => $originalBlock
+			"block" => $originalBlock
 		]);
 
-		$nbtTag = new Compound("", [
-			"Pos" => new Enum("Pos", [
-				new Double("", $pos->getX() + 0.5),
-				new Double("", $pos->getY()),
-				new Double("", $pos->getZ() + 0.5)]),
+		if(FreedomDive::getInstance()->getConfiguration("IS_BEAUTIFUL_ANIM")){
+			$nbtTag = new Compound("", [
+				"Pos" => new Enum("Pos", [
+					new Double("", $pos->getX() + 0.5),
+					new Double("", $pos->getY()),
+					new Double("", $pos->getZ() + 0.5)]),
 
-			"Rotation" => new Enum("Rotation", [
-				new Float("", 0),
-				new Float("", 0)]),
+				"Rotation" => new Enum("Rotation", [
+					new Float("", 0),
+					new Float("", 0)]),
 
-			"TileID" => new Int("TileID", $originalBlock->getId()),
+				"TileID" => new Int("TileID", $originalBlock->getId()),
 
-			"Data" => new Byte("Data", $originalBlock->getDamage())
-		]);
-		$sand = new NotPlacingFallingSand($level->getChunk($pos->getX() >> 4, $pos->getZ() >> 4), $nbtTag);
+				"Data" => new Byte("Data", $originalBlock->getDamage())
+			]);
+			$sand = new NotPlacingFallingSand($level->getChunk($pos->getX() >> 4, $pos->getZ() >> 4), $nbtTag);
 
-		$sand->setMotion(new Vector3(0, 0.55, 0));
+			$sand->setMotion(new Vector3(0, 0.55, 0));
 
-		Server::getInstance()->getPluginManager()->callEvent(new EntitySpawnEvent($sand));
-		$level->addEntity($sand);
+			Server::getInstance()->getPluginManager()->callEvent(new EntitySpawnEvent($sand));
+			$level->addEntity($sand);
+			$sand->spawnToAll();
+		}
 
 		$level->setBlock($pos, Block::get(0));
-
-		$sand->spawnToAll();
 	}
 
 	public function onTick(){
@@ -258,10 +280,14 @@ class WorldManager {
 				return TextFormat::GREEN.FreedomDive::getTranslation("PREPARING", round($time / 60), $time % 60);
 
 			case self::STATUS_INGAME:
-				$time = (FreedomDive::getInstance()->getConfiguration("GAME_TERM") - $this->roundTick / 20);
+				$time = (FreedomDive::getInstance()->getConfiguration("GAME_TERM") - $this->roundTick) / 20;
 				return TextFormat::AQUA.FreedomDive::getTranslation("GAME_MESSAGE", round($time / 60), $time % 60, $this->aliveCount);
 
 			default: return "";
 		}
+	}
+
+	public function canJoinGame(){
+		return $this->currentStatus !== self::STATUS_INGAME;
 	}
 }

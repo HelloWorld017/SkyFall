@@ -1,0 +1,7 @@
+language: en
+MIN_Y: 0
+NEED_PLAYERS: 2
+
+#unit is tick
+GAME_TERM: 2400
+PREPARATION_TERM: 300

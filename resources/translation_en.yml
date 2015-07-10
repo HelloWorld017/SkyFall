@@ -1,0 +1,13 @@
+LEVEL_INFORMATOR: Server %s1
+MUST_INGAME: You must call this command in-game!
+UNKNOWN_LEVEL: Unknown level given!
+PLEASE_RESTART_SERVER: Please restart server!
+RANK: RANKING
+FINISH_NO_WINNER: Game on server %s1 finished with no winner!
+FINISH_WINNER: "%s2 won the game on server %s1!"
+GAME_STARTED: Game started!
+WAITING_FOR_PLAYERS: "Waiting for players... (%s1/%s2)"
+PREPARING: "Preparation in progress... (%s1m %s2s left)"
+GAME_MESSAGE: "Game ongoing... (%s1m %s2s left, %s3 survived)"
+PLAYER_FALLEN: "%s1 was fallen!"
+PLAYER_OUT: "%s1 has left the game!"
